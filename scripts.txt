@@ -1,0 +1,13 @@
+#upload spiff 
+pio run -t uploadfs
+
+#upload littleFS 
+platformio run --target uploadfs
+
+esp8266 2.7.4
+
+
+#debug
+ pio device monitor -f esp8266_exception_decoder
+
+
