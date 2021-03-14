@@ -1,7 +1,7 @@
 #include "eepromUtils.h"
 
 boolean saveToEEPROM() {
-    StaticJsonDocument<EEPROM_SIZE> data;
+    DynamicJsonDocument data(EEPROM_SIZE);
 
     data["0"] = factoryReset;
     data["1"] = webLogin;
@@ -14,18 +14,24 @@ boolean saveToEEPROM() {
     data["8"] = precFactor;
     data["9"] = vdPrecFactor;
 
+    String output = "";
 
-    char dataAr[EEPROM_SIZE];
-    serializeJson(data, Serial);
-    delay(1000);
-    serializeJson(data, dataAr);
+    serializeJson(data, output);
+    Serial.println("Serializing to buffer successful");
+    Serial.println(output);
 
-    for (int i = 0; i < EEPROM_SIZE; i++) {
-        EEPROM.write(0x0F + i, dataAr[i]);
+   unsigned int outSize = output.length();
+
+    for (int i = 0; i < outSize ; i++) {
+        EEPROM.write(0x0F + i, output[i]);
     }
 
+    Serial.println("Writting to EEPROM successful");
+
     boolean ok = EEPROM.commit();
+
     Serial.println((ok) ? "Commit OK" : "Commit failed");
+    return ok;
 }
 
 void loadDataFromEEPROM() {
@@ -121,4 +127,20 @@ void clearEEPROM() {
 
     boolean ok = EEPROM.commit();
     Serial.println((ok) ? "Commit OK" : "Commit failed");
+}
+
+
+void saveSystemVoltageCalibration(float sysVoltageToSave){
+    pwrVolt = sysVoltageToSave;
+    saveToEEPROM();
+}
+
+void saveADCCalibration(float precFactorToSave){
+    precFactor = precFactorToSave;
+    saveToEEPROM();
+}
+
+void saveUPSBatteryVoltageCalibration(float vdPrecFactorToSave){
+    vdPrecFactor = vdPrecFactorToSave;
+    saveToEEPROM();
 }

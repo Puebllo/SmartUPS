@@ -5,7 +5,6 @@
 
 
 // IO
-#define EEPROM_SIZE 512
 #define SECOND_DEFINITION 1000
 
 extern int adcVal;
@@ -27,5 +26,11 @@ extern String webPassword;
 extern boolean factoryReset;
 
 extern boolean wifiConnected;
+
+typedef struct {
+    String serverName;
+    String ipAddress;
+    String macAddress;
+} managedServer;
 
 #endif
