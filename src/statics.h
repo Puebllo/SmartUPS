@@ -1,7 +1,7 @@
 #ifndef STATICS_H
 #define STATICS_H
 
-#define EEPROM_SIZE 512
+#define EEPROM_SIZE 1024
 
 extern char ip[15]; 
 extern int webPort;
