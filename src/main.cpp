@@ -1,7 +1,6 @@
 #include "screens.h"
 #include "utils.h"
 
-#include <WiFiUdp.h>
 
 #include <SPI.h>
 #include <Wire.h>
@@ -39,41 +38,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //long startTime = 0;
 
 String msg = "";
-WiFiUDP UDP;
-/**
- * The Magic Packet needs to be sent as BROADCAST in the LAN
- */
-IPAddress computer_ip(192, 168, 1, 255);
 
-/**
- * The targets MAC address to send the packet to
- */
-
-//NAS
-//byte mac[] = { 0x00, 0x11, 0x32, 0xAA, 0x0F, 0xD9 };
-
-//SPEEDO
-byte mac[] = {0x24, 0xB6, 0xFD, 0x3F, 0x44, 0x38};
-
-
-
-
-
-void sendWOL(IPAddress addr, WiFiUDP udp, byte *mac, size_t size_of_mac){
-
-  byte preamble[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-  byte i;
-
-  udp.beginPacket(addr, 9); //sending packet at 9,
-
-  udp.write(preamble, sizeof preamble);
-
-  for (i = 0; i < 16; i++)
-  {
-    udp.write(mac, size_of_mac);
-  }
-  udp.endPacket();
-}
 
 
 
@@ -272,6 +237,7 @@ boolean setupWifi() {
 }*/
 
 void setup(){
+  Serial.begin(115200);
 
       EEPROM.begin(EEPROM_SIZE);
     delay(200);
@@ -289,7 +255,6 @@ void setup(){
   display.setTextColor(WHITE);
 
   display.clearDisplay();
-  Serial.begin(115200);
 
   welcomeScreen(display);
 
@@ -308,12 +273,10 @@ clearSessions();
 
   // Initialise wifi connection
   wifiConnected = setupWifi();
-  UDP.begin(9); //start UDP client, not sure if really necessary.
 
  // if (wifiConnected){
     startServer();
     //Serial.println("Sending WOL Packet...");
-    // sendWOL(computer_ip, UDP, mac, sizeof mac);
     //  delay(4000);
   //}
   startMillis = millis(); //initial start time

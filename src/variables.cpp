@@ -20,8 +20,6 @@ boolean factoryReset = false;
 
 boolean wifiConnected = false;
 
-typedef struct {
-    String serverName;
-    String ipAddress;
-    String macAddress;
-} managedServer;
+int serversCount = 0;
+
+managedServer managedServers[5];
