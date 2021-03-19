@@ -1,109 +1,188 @@
 #include "utils.h"
 
-String getUptime(){
 
-  long startTime = millis();
+String getUptime() {
+    long startTime = millis();
 
-  long ss = int((startTime / (1000)) % 60);
-  long mm = int((startTime / (1000 * 60)) % 60);
-  long hh = int((startTime / (1000 * 60 * 60)) % 24);
-  long dd = int((startTime / (1000 * 60 * 60 * 24)) % 365);
+    long ss = int((startTime / (1000)) % 60);
+    long mm = int((startTime / (1000 * 60)) % 60);
+    long hh = int((startTime / (1000 * 60 * 60)) % 24);
+    long dd = int((startTime / (1000 * 60 * 60 * 24)) % 365);
 
-  // for output
-  sprintf(timestring, "%d days %02d:%02d:%02d", dd, hh, mm, ss);
+    sprintf(timestring, "%d days %02d:%02d:%02d", dd, hh, mm, ss);
 
- //String time =  systemUpTimeDy + String(" days, ") + systemUpTimeHr + String(":") + systemUpTimeMn;
-
- // Serial.println(timestring);
-  return timestring;
+    return timestring;
 }
 
-
-String getPrecCalibData()
-{
-  return String(precFactor,8) + ";" + String(vdPrecFactor,8) + ";" + String(pwrVolt,3);
+String getPrecCalibData() {
+    return String(precFactor, 8) + ";" + String(vdPrecFactor, 8) + ";" +
+           String(pwrVolt, 3);
 }
 
-String getCalibData()
-{
-  return String(adcVal) + ";" + String(espVolt) + ";" + String(upsBatteryVoltage) + ";" + String(stateOfCharge);
+String getCalibData() {
+    return String(adcVal) + ";" + String(espVolt) + ";" +
+           String(upsBatteryVoltage) + ";" + String(stateOfCharge);
 }
 
-String getInitData()
-{
-  return String(ip) + ";" + String(WiFi.macAddress()) + ";" + getUptime();
+String getInitData() {
+    return String(ip) + ";" + String(WiFi.macAddress()) + ";" + getUptime();
 }
 
-String processor(const String &var)
-{
-  return String();
-}
+String processor(const String &var) { return String(); }
 
-
-
-
-float mapDouble(double x, double in_min, double in_max, double out_min, double out_max) {
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+float mapDouble(double x, double in_min, double in_max, double out_min,
+                double out_max) {
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 double getVoltage() {
-  adcVal = analogRead(A0);
-  //Serial.print("ADC: ");   Serial.println(val);
-  espVolt = ((pwrVolt / 1024) * adcVal * 1000.0) * precFactor;
-    //Serial.print("espVolt: ");   Serial.println(espVolt);
+    adcVal = analogRead(A0);
+    espVolt = ((pwrVolt / 1024) * adcVal * 1000.0) * precFactor;
 
-upsBatteryVoltage = mapDouble(espVolt,0.0, 3.256, 0.0, 14.0)* vdPrecFactor;
-
-    //Serial.print("mapped: ");   Serial.println(mapped);
-
-  return upsBatteryVoltage;
+    upsBatteryVoltage =
+        mapDouble(espVolt, 0.0, 3.256, 0.0, 14.0) * vdPrecFactor;
+    return upsBatteryVoltage;
 }
 
-
-float getLinearizationRange(double voltage, int linearSize, float voltageRange[], float valueRange[]) {
-  int previous_i = 0;
-  for (int i = 1 ; i <= linearSize; i++) {
-    if (voltage < voltageRange[previous_i] && voltage > voltageRange[i]) {
-      return mapDouble(voltage, voltageRange[previous_i], voltageRange[i], valueRange[previous_i],  valueRange[i]);
+float getLinearizationRange(double voltage, int linearSize,
+                            float voltageRange[], float valueRange[]) {
+    int previous_i = 0;
+    for (int i = 1; i <= linearSize; i++) {
+        if (voltage < voltageRange[previous_i] && voltage > voltageRange[i]) {
+            return mapDouble(voltage, voltageRange[previous_i], voltageRange[i],
+                             valueRange[previous_i], valueRange[i]);
+        }
+        previous_i = i;
     }
-    previous_i = i;
-  }
-  return -1;
+    return -1;
+}
+
+void checkUPSStatus() {
+    // Check if UPS is online
+    if (digitalRead(PHASE_PIN) == 1) {
+        CURRENT_STATUS = STATUS_ONBATTERY;
+    } else {
+        CURRENT_STATUS = STATUS_ONLINE;
+    }
+
+    // measure battery voltage
+    float voltage = 0.0;
+    for (int i = 0; i < MEASURE_COUNT; i++) {
+        voltage += getVoltage();
+        delay(10);
+    }
+    voltage = voltage / MEASURE_COUNT;
+    if (voltage > 12700.0) {
+        stateOfCharge = 100;
+    } else {
+        stateOfCharge =
+            getLinearizationRange(voltage, 11, socValueArray, battPercArray);
+    }
+}
+
+void doFactoryReset() {}
+
+String getConfigData() { return webLogin + ";" + ap_ssid + ";" + ap_ssid_2; }
+
+void addServer(managedServer newServer) {
+    // Serial.print(newServer.serverName); Serial.print(" ");
+    // Serial.print(newServer.ipAddress); Serial.print(" ");
+    // Serial.print(newServer.macAddress); Serial.println(" ");
+    managedServers[serversCount] = newServer;
+    serversCount++;
+    saveToEEPROM();
+}
+
+String getServersListJson() {
+    DynamicJsonDocument data(512);
+
+    data["servers_count"] = serversCount;                   // servers count
+    JsonArray servers = data.createNestedArray("servers");  // servers array
+    StaticJsonDocument<128> doc;
+
+    for (int i = 0; i < serversCount; i++) {
+        if (managedServers[i].serverName.equals(SERVER_REMOVE_FLAG)) {
+            continue;
+        }
+        doc.clear();
+        JsonObject obj = doc.createNestedObject();
+        obj["0"] = managedServers[i].serverName;  // server name
+        obj["1"] = managedServers[i].ipAddress;   // ip address
+        obj["2"] = managedServers[i].macAddress;  // mac address
+        obj["3"] = true;  // managedServers[i].isOnline;  // mac address
+        servers.add(obj);
+    }
+
+    String output;
+    serializeJson(data, output);
+    return output;
+}
+
+void removeServer(String serverName) {
+    int serverIndex = -1;
+    for (int i = 0; i < serversCount; i++) {
+        if (managedServers[i].serverName.equals(serverName)) {
+            serverIndex = i;
+            managedServers[i].serverName = SERVER_REMOVE_FLAG;
+            break;
+        }
+    }
+    if (serverIndex != -1) {
+        cleanEEPROM();
+        saveToEEPROM();
+    }
 }
 
 
-
-
-
-void checkUPSStatus(){
-
-//Check if UPS is online
-if (digitalRead(PHASE_PIN) == 1){
-CURRENT_STATUS = STATUS_ONBATTERY;
-}else{
-  CURRENT_STATUS = STATUS_ONLINE;
+managedServer getServerByName(String serverName) {
+    for (int i = 0; i < serversCount; i++) {
+        if (managedServers[i].serverName.equals(serverName)) {
+            return managedServers[i];
+        }
+    }
 }
 
-//measure battery voltage
-float voltage = 0.0;
-  for (int i = 0 ; i < MEASURE_COUNT; i++) {
-    voltage += getVoltage();
-    delay(10);
-  }
-  voltage = voltage / MEASURE_COUNT;
-   // Serial.print("mean voltage: ");   Serial.println(voltage);
+byte nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
 
-if(voltage > 12700.0){
-  stateOfCharge = 100;
-}else{
-stateOfCharge = getLinearizationRange(voltage, 11, socValueArray, battPercArray);
-}
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+
+    return 0;  // Not a valid hexadecimal character
 }
 
-void doFactoryReset(){
+void hexCharacterStringToBytes(byte *byteArray, const char *hexString) {
+    bool oddLength = strlen(hexString) & 1;
 
-}
+    byte currentByte = 0;
+    byte byteIndex = 0;
 
-String getConfigData(){
-  return webLogin +";"+ ap_ssid+";"+ ap_ssid_2;
+    for (byte charIndex = 0; charIndex < strlen(hexString); charIndex++) {
+        bool oddCharIndex = charIndex & 1;
+
+        if (oddLength) {
+            // If the length is odd
+            if (oddCharIndex) {
+                // odd characters go in high nibble
+                currentByte = nibble(hexString[charIndex]) << 4;
+            } else {
+                // Even characters go into low nibble
+                currentByte |= nibble(hexString[charIndex]);
+                byteArray[byteIndex++] = currentByte;
+                currentByte = 0;
+            }
+        } else {
+            // If the length is even
+            if (!oddCharIndex) {
+                // Odd characters go into the high nibble
+                currentByte = nibble(hexString[charIndex]) << 4;
+            } else {
+                // Odd characters go into low nibble
+                currentByte |= nibble(hexString[charIndex]);
+                byteArray[byteIndex++] = currentByte;
+                currentByte = 0;
+            }
+        }
+    }
 }

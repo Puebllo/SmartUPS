@@ -14,5 +14,6 @@ void clearEEPROM();
 void saveSystemVoltageCalibration(float sysVoltageToSave);
 void saveADCCalibration(float precFactorToSave);
 void saveUPSBatteryVoltageCalibration(float vdPrecFactorToSave);
+boolean cleanEEPROM();
 
 #endif

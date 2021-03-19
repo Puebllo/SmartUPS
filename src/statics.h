@@ -43,4 +43,6 @@ extern webSession sessions[3];
 
 extern uint8_t SCREEN_WIDTH; 
 extern uint8_t SCREEN_HEIGHT;
+
+extern String SERVER_REMOVE_FLAG;
 #endif
