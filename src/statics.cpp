@@ -40,3 +40,5 @@ typedef struct {
 } webSession;
 
 webSession sessions[3];
+
+String SERVER_REMOVE_FLAG = "#REMOVED#";

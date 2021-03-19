@@ -1,4 +1,5 @@
 #include "webServer.h"
+#include "machines.h"
 
 AsyncWebServer server(webPort);
 
@@ -139,6 +140,23 @@ String getParamValue(AsyncWebServerRequest *request, String paramName) {
     return "";
 }
 
+// Check if smartups is connected to AP
+void requestPreprocessor(AsyncWebServerRequest *request,
+                         String destinationEndpoint) {
+    if (!wifiConnected) {
+        request->send(LittleFS, "/ap_index.html", "text/html", false,
+                      processor);
+    } else {
+        if (checkIfSessionExistsAndNotExpired(request->client()->remoteIP())) {
+            request->send(LittleFS, destinationEndpoint, "text/html", false,
+                          processor);
+        } else {
+            request->send(LittleFS, "/loginPage.html", "text/html", false,
+                          processor);
+        }
+    }
+}
+
 void startServer() {
     Serial.println("Starting web server at port 80");
     server.on("/login", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -147,20 +165,7 @@ void startServer() {
         // request->send_P(200, "text/html", index_html, processor);
     });
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!wifiConnected) {
-            request->send(LittleFS, "/ap_index.html", "text/html", false,
-                          processor);
-        } else {
-            if (checkIfSessionExistsAndNotExpired(
-                    request->client()->remoteIP())) {
-                request->send(LittleFS, "/index.html", "text/html", false,
-                              processor);
-            } else {
-                request->send(LittleFS, "/loginPage.html", "text/html", false,
-                              processor);
-            }
-        }
-        // request->send_P(200, "text/html", index_html, processor);
+        requestPreprocessor(request, "/index.html");
     });
     server.on("/getConfigData", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!wifiConnected) {
@@ -169,6 +174,10 @@ void startServer() {
             request->send(401);
         }
     });
+    server.on("/addNewServerForm", HTTP_GET,
+              [](AsyncWebServerRequest *request) {
+                  requestPreprocessor(request, "/newServerForm.html");
+              });
     server.on("/calib", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(LittleFS, "/calib.html", "text/html", false, processor);
         // request->send_P(200, "text/html", index_html, processor);
@@ -213,6 +222,11 @@ void startServer() {
     server.on(
         "/getPrecCalibData", HTTP_GET, [](AsyncWebServerRequest *request) {
             request->send_P(200, "text/plain", getPrecCalibData().c_str());
+        });
+
+     server.on(
+        "/getServersListJson", HTTP_GET, [](AsyncWebServerRequest *request) {
+            request->send_P(200, "text/plain", getServersListJson().c_str());
         });
 
     // Calibration posts
@@ -318,6 +332,53 @@ void startServer() {
             ESP.reset();
         }
     });
+
+    // Add new server Post
+    server.on("/addServer", HTTP_POST, [](AsyncWebServerRequest *request) {
+        managedServer newServer;
+        String value = getParamValue(request, "serverName");
+        if ((value.length() > 0) & (!value.equals(webLogin))) {
+            newServer.serverName = value.c_str();
+        }
+        value = getParamValue(request, "serverIp");
+
+        if ((value.length() > 0) & (!value.equals(webLogin))) {
+            newServer.ipAddress = value.c_str();
+        }
+        value = getParamValue(request, "serverMAC");
+        if ((value.length() > 0) & (!value.equals(webLogin))) {
+            newServer.macAddress = value.c_str();
+        }
+        addServer(newServer);
+        request->redirect("/");
+    });
+
+    //remove server
+        server.on("/removeServer", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String serverName;
+        String value = getParamValue(request, "serverName");
+        if ((value.length() > 0) & (!value.equals(webLogin))) {
+            serverName = value.c_str();
+        }
+        Serial.print("Server name: "); Serial.println(serverName);
+        removeServer(serverName);
+        request->redirect("/");
+    });
+
+    //Turn on server
+        server.on("/turnOn", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String serverName;
+        String value = getParamValue(request, "serverName");
+        if ((value.length() > 0) & (!value.equals(webLogin))) {
+            serverName = value.c_str();
+        }
+        Serial.print("Server name: "); Serial.println(serverName);
+        turnOn(serverName);
+        request->redirect("/");
+    });
+
+
+
 
     server.begin();
 

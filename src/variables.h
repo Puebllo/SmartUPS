@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-
 // IO
 #define SECOND_DEFINITION 1000
 
@@ -27,10 +26,15 @@ extern boolean factoryReset;
 
 extern boolean wifiConnected;
 
+extern int serversCount;
+
 typedef struct {
     String serverName;
     String ipAddress;
     String macAddress;
+    boolean isOnline;
 } managedServer;
+
+extern managedServer managedServers[5];
 
 #endif
