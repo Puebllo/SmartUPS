@@ -4,7 +4,7 @@
 float battPercArray[11] = {0.0,  10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0};
 float socValueArray[11] = {10500.0, 11310.0, 11580.0, 11750.0, 11900.0, 12060.0, 12200.0, 12320.0, 12420.0, 12500.0, 12700.0};
 
-int MEASURE_COUNT = 10;
+int MEASURE_COUNT = 100;
 int sessionNr = 0;
 
 float pwrVolt = 3.3;
@@ -31,8 +31,6 @@ float upsBatteryVoltage = 0.0;
 
 uint8_t SCREEN_WIDTH = 128;
 uint8_t SCREEN_HEIGHT = 64;
-
-unsigned long SESSION_EXPIRE_TIME = 300000;  // 300s
 
 typedef struct {
     String ipAddress;

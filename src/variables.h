@@ -37,4 +37,11 @@ typedef struct {
 
 extern managedServer managedServers[5];
 
+extern float lowBatterySoC;
+extern unsigned long sessionTime;
+
+extern boolean measureVoltage;
+extern int samplesCount;
+extern boolean rebootFlag;
+extern int configUploadStatusCode;
 #endif

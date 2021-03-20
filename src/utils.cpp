@@ -1,5 +1,6 @@
 #include "utils.h"
 
+float voltage = 0.0;
 
 String getUptime() {
     long startTime = millis();
@@ -38,10 +39,9 @@ float mapDouble(double x, double in_min, double in_max, double out_min,
 double getVoltage() {
     adcVal = analogRead(A0);
     espVolt = ((pwrVolt / 1024) * adcVal * 1000.0) * precFactor;
+    float batt = mapDouble(espVolt, 0.0, 3.256, 0.0, 14.0) * vdPrecFactor;
 
-    upsBatteryVoltage =
-        mapDouble(espVolt, 0.0, 3.256, 0.0, 14.0) * vdPrecFactor;
-    return upsBatteryVoltage;
+    return batt;
 }
 
 float getLinearizationRange(double voltage, int linearSize,
@@ -66,28 +66,37 @@ void checkUPSStatus() {
     }
 
     // measure battery voltage
-    float voltage = 0.0;
-    for (int i = 0; i < MEASURE_COUNT; i++) {
+    if (measureVoltage) {
         voltage += getVoltage();
-        delay(10);
+        samplesCount++;
     }
-    voltage = voltage / MEASURE_COUNT;
-    if (voltage > 12700.0) {
+    if (samplesCount == MEASURE_COUNT) {
+        samplesCount = 0;
+        upsBatteryVoltage = voltage / MEASURE_COUNT;
+        voltage = 0.0;
+    }
+
+    if (upsBatteryVoltage > 12700.0) {
         stateOfCharge = 100;
     } else {
         stateOfCharge =
-            getLinearizationRange(voltage, 11, socValueArray, battPercArray);
+            getLinearizationRange(upsBatteryVoltage, 11, socValueArray, battPercArray);
+    }
+
+    if (stateOfCharge <= lowBatterySoC) {
+        CURRENT_STATUS = STATUS_LOWBATT;
     }
 }
 
 void doFactoryReset() {}
 
-String getConfigData() { return webLogin + ";" + ap_ssid + ";" + ap_ssid_2; }
+String getConfigData() {
+    long sTime = sessionTime / 1000;
+    return webLogin + ";" + ap_ssid + ";" + ap_ssid_2 + ";" + lowBatterySoC +
+           ";" + sTime;
+}
 
 void addServer(managedServer newServer) {
-    // Serial.print(newServer.serverName); Serial.print(" ");
-    // Serial.print(newServer.ipAddress); Serial.print(" ");
-    // Serial.print(newServer.macAddress); Serial.println(" ");
     managedServers[serversCount] = newServer;
     serversCount++;
     saveToEEPROM();
@@ -132,7 +141,6 @@ void removeServer(String serverName) {
         saveToEEPROM();
     }
 }
-
 
 managedServer getServerByName(String serverName) {
     for (int i = 0; i < serversCount; i++) {
