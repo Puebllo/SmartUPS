@@ -1,4 +1,5 @@
 #include "webServer.h"
+
 #include "machines.h"
 
 AsyncWebServer server(webPort);
@@ -13,7 +14,7 @@ String getRemainingSessionTime(IPAddress sessionIp) {
     for (int i = 0; i < 3; i++) {
         webSession ws = sessions[i];
         if (!ws.ipAddress.equals("-1") && ws.ipAddress.equals(ip)) {
-            unsigned long maxTime = ws.loginTime + SESSION_EXPIRE_TIME;
+            unsigned long maxTime = ws.loginTime + sessionTime;
             unsigned long now = millis();
 
             if (maxTime >= now) {
@@ -32,7 +33,6 @@ String getRemainingSessionTime(IPAddress sessionIp) {
 }
 
 boolean saveUserSession(unsigned long loginTime, IPAddress sessionIp) {
-    // if (sessionNr+1 <= 3){
     // check if session for this ip exists and if yes then reload time
     for (int i = 0; i < 3; i++) {
         webSession ws = sessions[i];
@@ -43,17 +43,6 @@ boolean saveUserSession(unsigned long loginTime, IPAddress sessionIp) {
             break;
         }
     }
-
-    // webSession ws;
-    // ws.ipAddress = sessionIp.toString();
-    // ws.loginTime = loginTime;
-
-    // sessions[sessionNr] = ws;
-    // sessionNr++;
-
-    // return true;
-
-    // look for place for session
 
     for (int i = 0; i < 3; i++) {
         webSession ws = sessions[i];
@@ -78,7 +67,7 @@ boolean checkIfSessionExistsAndNotExpired(IPAddress sessionIp) {
     for (int i = 0; i < 3; i++) {
         webSession ws = sessions[i];
         if (ws.ipAddress.equals(sessionIp.toString())) {
-            unsigned long maxTime = ws.loginTime + SESSION_EXPIRE_TIME;
+            unsigned long maxTime = ws.loginTime + sessionTime;
             if (millis() < maxTime) {
                 return true;
             } else {
@@ -89,18 +78,33 @@ boolean checkIfSessionExistsAndNotExpired(IPAddress sessionIp) {
     return false;
 }
 
+void clearSession(int index, webSession ws) {
+    Serial.print("Releasing session with ip: ");
+    Serial.println(ws.ipAddress);
+
+    ws.ipAddress = "-1";
+    ws.loginTime = 0;
+    sessions[index] = ws;
+}
+
+boolean removeSessionForIP(IPAddress sessionIp) {
+    for (int i = 0; i < 3; i++) {
+        webSession ws = sessions[i];
+        if (ws.ipAddress.equals(sessionIp.toString())) {
+            clearSession(i, ws);
+            return true;
+        }
+    }
+    return false;
+}
+
 void validateSessions() {
     for (int i = 0; i < 3; i++) {
         webSession ws = sessions[i];
         if (!ws.ipAddress.equals("-1")) {
-            unsigned long maxTime = ws.loginTime + SESSION_EXPIRE_TIME;
+            unsigned long maxTime = ws.loginTime + sessionTime;
             if (millis() > maxTime) {
-                Serial.print("Releasing session with ip: ");
-                Serial.println(ws.ipAddress);
-
-                ws.ipAddress = "-1";
-                ws.loginTime = 0;
-                sessions[i] = ws;
+                clearSession(i, ws);
             }
         }
     }
@@ -110,14 +114,6 @@ void clearSessions() {
     for (int i = 0; i < 3; i++) {
         sessions[i] = {"-1", 0};
     }
-
-    for (int i = 0; i < 3; i++) {
-        webSession ws = sessions[i];
-        Serial.print("Session ");
-        Serial.print(i);
-        Serial.print(". - IP: ");
-        Serial.println(ws.ipAddress);
-    }
 }
 
 String getUPSData(IPAddress sessionIp) {
@@ -126,7 +122,8 @@ String getUPSData(IPAddress sessionIp) {
     long voltPrec = (voltage / 14.0) * 100;
     return String(voltage) + ";" + String(voltPrec) + ";" +
            String(stateOfCharge) + ";" + String(counter) + ";" + getUptime() +
-           ";" + getRemainingSessionTime(sessionIp);
+           ";" + getRemainingSessionTime(sessionIp) + ";" +
+           String(CURRENT_STATUS);
 }
 
 String getParamValue(AsyncWebServerRequest *request, String paramName) {
@@ -157,23 +154,61 @@ void requestPreprocessor(AsyncWebServerRequest *request,
     }
 }
 
+boolean isUserAuthorized(AsyncWebServerRequest *request) {
+    boolean auth =
+        checkIfSessionExistsAndNotExpired(request->client()->remoteIP());
+    if (!auth) {
+        request->redirect("/login");
+        return false;
+    }
+    return true;
+}
+
+void onConfigUpload(AsyncWebServerRequest *request, String filename,
+                    size_t index, uint8_t *data, size_t len, bool final) {
+    if (final) {
+        String fileData = (const char *)data;
+        int idx = filename.lastIndexOf(".");
+        String fileExt = filename.substring(idx + 1, filename.length());
+        fileExt.toLowerCase();
+
+        if (fileExt.equals("bck")) {
+            if (writeAndCommitEEPROM(fileData)) {
+                configUploadStatusCode = 1;
+            } else {
+                configUploadStatusCode = -1;
+            }
+        } else {
+            configUploadStatusCode = -2;
+        }
+    }
+}
+
 void startServer() {
     Serial.println("Starting web server at port 80");
     server.on("/login", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(LittleFS, "/loginPage.html", "text/html", false,
                       processor);
-        // request->send_P(200, "text/html", index_html, processor);
+    });
+    server.on("/logout", HTTP_GET, [](AsyncWebServerRequest *request) {
+        removeSessionForIP(request->client()->remoteIP());
+        request->redirect("/");
     });
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         requestPreprocessor(request, "/index.html");
     });
     server.on("/getConfigData", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!wifiConnected) {
+        if (isUserAuthorized(request)) {
             request->send_P(200, "text/plain", getConfigData().c_str());
-        } else {
-            request->send(401);
         }
     });
+    server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request) {
+        requestPreprocessor(request, "/settings.html");
+    });
+    server.on("/upsConfig", HTTP_GET, [](AsyncWebServerRequest *request) {
+        requestPreprocessor(request, "/ap_index.html");
+    });
+
     server.on("/addNewServerForm", HTTP_GET,
               [](AsyncWebServerRequest *request) {
                   requestPreprocessor(request, "/newServerForm.html");
@@ -224,7 +259,7 @@ void startServer() {
             request->send_P(200, "text/plain", getPrecCalibData().c_str());
         });
 
-     server.on(
+    server.on(
         "/getServersListJson", HTTP_GET, [](AsyncWebServerRequest *request) {
             request->send_P(200, "text/plain", getServersListJson().c_str());
         });
@@ -326,9 +361,19 @@ void startServer() {
             ap_password_2 = value.c_str();
             configChanged = true;
         }
+        float lowBattSoC = getParamValue(request, "lowBattSoC").toFloat();
+        if (lowBattSoC != lowBatterySoC) {
+            lowBatterySoC = lowBattSoC;
+            configChanged = true;
+        }
+        int sTime = getParamValue(request, "sTime").toInt();
+        if (sTime != sessionTime) {
+            sessionTime = sTime;
+            configChanged = true;
+        }
         if (configChanged) {
             saveToEEPROM();
-            delay(500);
+            delay(1000);
             ESP.reset();
         }
     });
@@ -353,32 +398,97 @@ void startServer() {
         request->redirect("/");
     });
 
-    //remove server
-        server.on("/removeServer", HTTP_POST, [](AsyncWebServerRequest *request) {
+    // remove server
+    server.on("/removeServer", HTTP_POST, [](AsyncWebServerRequest *request) {
         String serverName;
         String value = getParamValue(request, "serverName");
         if ((value.length() > 0) & (!value.equals(webLogin))) {
             serverName = value.c_str();
         }
-        Serial.print("Server name: "); Serial.println(serverName);
+        Serial.print("Server name: ");
+        Serial.println(serverName);
         removeServer(serverName);
         request->redirect("/");
     });
 
-    //Turn on server
-        server.on("/turnOn", HTTP_POST, [](AsyncWebServerRequest *request) {
+    // Turn on server
+    server.on("/turnOn", HTTP_POST, [](AsyncWebServerRequest *request) {
         String serverName;
         String value = getParamValue(request, "serverName");
         if ((value.length() > 0) & (!value.equals(webLogin))) {
             serverName = value.c_str();
         }
-        Serial.print("Server name: "); Serial.println(serverName);
+        Serial.print("Server name: ");
+        Serial.println(serverName);
         turnOn(serverName);
         request->redirect("/");
     });
 
+    // reboot SmartUPS
+    server.on("/doReboot", HTTP_GET, [](AsyncWebServerRequest *request) {
+        AsyncWebServerResponse *response = request->beginResponse(
+            LittleFS, "/msgPage.html", "text/html", false, processor);
+        if (isUserAuthorized(request)) {
+            response->addHeader("title", "Reboot UPS");
+            response->addHeader("msg", "SmartUPS will now reboot");
+            response->setCode(200);
+            request->send(response);
+            rebootFlag = true;
+        } else {
+            response->addHeader("title", "I'm sorry...");
+            response->addHeader("msg",
+                                "You are not authorized to do this action");
+            response->addHeader("srcUrl", "/settings");
+            response->setCode(401);
+            request->send(response);
+        }
+    });
 
+    // Get Config from EEPROM for backup
+    server.on(
+        "/getBackupDownload", HTTP_GET, [](AsyncWebServerRequest *request) {
+            AsyncWebServerResponse *response = request->beginResponse(
+                LittleFS, "/msgPage.html", "text/html", false, processor);
+            if (isUserAuthorized(request)) {
+                request->send_P(200, "text/plain", getDataFromEEPROM().c_str());
+            } else {
+                response->addHeader("title", "I'm sorry...");
+                response->addHeader("msg",
+                                    "You are not authorized to do this action");
+                response->addHeader("srcUrl", "/settings");
+                response->setCode(401);
+                request->send(response);
+            }
+        });
 
+    // Upload config file
+    server.on(
+        "/uploadConfig", HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            AsyncWebServerResponse *response = request->beginResponse(
+                LittleFS, "/msgPage.html", "text/html", false, processor);
+            response->setCode(200);
+            if (configUploadStatusCode == 1) {
+                response->addHeader("title", "Load Configuration");
+                response->addHeader(
+                    "msg", "Configuration restored. SmartUPS will reboot");
+                request->send(response);
+                rebootFlag = true;
+            } else {
+                String msg = "";
+                response->addHeader("title", "Error !");
+                if (configUploadStatusCode == -1) {
+                    msg = "Error while commiting configuration !";
+                }
+                if (configUploadStatusCode == -2) {
+                    msg = "Wrong backup file !";
+                }
+                response->addHeader("msg", msg);
+                response->addHeader("srcUrl", "/settings");
+                request->send(response);
+            }
+        },
+        onConfigUpload);
 
     server.begin();
 

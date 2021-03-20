@@ -1,5 +1,18 @@
 #include "eepromUtils.h"
 
+boolean writeAndCommitEEPROM(String data) {
+    unsigned int dataSize = data.length();
+
+    for (int i = 0; i < dataSize; i++) {
+        EEPROM.write(0x0F + i, data[i]);
+    }
+
+    boolean ok = EEPROM.commit();
+
+    Serial.println((ok) ? "Commit OK" : "Commit failed");
+    return ok;
+}
+
 boolean saveToEEPROM() {
     DynamicJsonDocument data(EEPROM_SIZE);
 
@@ -25,7 +38,7 @@ boolean saveToEEPROM() {
     StaticJsonDocument<128> doc;
     int sCount = 0;
     for (int i = 0; i < serversCount; i++) {
-        if (managedServers[i].serverName.equals(SERVER_REMOVE_FLAG)){
+        if (managedServers[i].serverName.equals(SERVER_REMOVE_FLAG)) {
             continue;
         }
         doc.clear();
@@ -36,32 +49,29 @@ boolean saveToEEPROM() {
         servers.add(obj);
         sCount++;
     }
-    serversData["0"] = sCount;                    // servers count
+    serversData["0"] = sCount;  // servers count
+    data["B"] = lowBatterySoC;
+    data["C"] = sessionTime;
 
     String output;
     serializeJson(data, output);
-    Serial.println(output);
 
-    unsigned int outSize = output.length();
-
-    for (int i = 0; i < outSize; i++) {
-        EEPROM.write(0x0F + i, output[i]);
-    }
-
-    boolean ok = EEPROM.commit();
-
-    Serial.println((ok) ? "Commit OK" : "Commit failed");
+    boolean ok = writeAndCommitEEPROM(output);
     return ok;
 }
 
-void loadDataFromEEPROM() {
-    delay(5000);
+String getDataFromEEPROM() {
     String json;
     for (int i = 0; i < EEPROM_SIZE; i++) {
         json = json + char(EEPROM.read(0x0F + i));
     }
-    Serial.println(json);
+    int idx = json.lastIndexOf("}}");
+    json = json.substring(0, idx+2);
+    return json;
+}
 
+void loadDataFromEEPROM() {
+    String json = getDataFromEEPROM();
     StaticJsonDocument<EEPROM_SIZE> root;
 
     DeserializationError error = deserializeJson(root, json);
@@ -93,21 +103,20 @@ void loadDataFromEEPROM() {
 
         JsonObject jo = root["A"];
         serversCount = jo["0"];
-        // Serial.print("servers count: "); Serial.println(serversCount);
 
         JsonArray servers = jo["1"];
-        // Serial.println("load servers from eeprom:");
         for (int i = 0; i < serversCount; i++) {
             managedServer ms;
             ms.serverName = servers[i]["0"].as<String>();
             ms.ipAddress = servers[i]["1"].as<String>();
             ms.macAddress = servers[i]["2"].as<String>();
-            // Serial.print(ms.serverName); Serial.print(" ");
-            // Serial.print(ms.ipAddress); Serial.print(" ");
-            // Serial.print(ms.macAddress); Serial.println(" ");
-
             managedServers[i] = ms;
         }
+
+        lowBatterySoC = root["B"];
+
+        sessionTime = root["C"];
+        sessionTime = sessionTime * 1000;
 
     } else {
         Serial.print("Error while deserializing eeprom");
@@ -129,6 +138,8 @@ void clearEEPROM() {
     data["9"] = "";
     data["0"] = "";
     data["A"] = "";
+    data["A"] = "40.0";
+    data["A"] = "600";
 
     String output;
     serializeJson(data, output);
@@ -144,7 +155,7 @@ void clearEEPROM() {
     Serial.println((ok) ? "Commit OK" : "Commit failed");
 }
 
-boolean cleanEEPROM(){
+boolean cleanEEPROM() {
     for (int i = 0; i < EEPROM_SIZE; i++) {
         EEPROM.write(0x0F + i, 0);
     }

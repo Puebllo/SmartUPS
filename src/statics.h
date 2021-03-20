@@ -36,7 +36,6 @@ typedef struct {
     unsigned long loginTime;
 } webSession;
 
-extern unsigned long SESSION_EXPIRE_TIME;
 extern int sessionNr;
 
 extern webSession sessions[3];

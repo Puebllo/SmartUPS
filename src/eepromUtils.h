@@ -16,4 +16,7 @@ void saveADCCalibration(float precFactorToSave);
 void saveUPSBatteryVoltageCalibration(float vdPrecFactorToSave);
 boolean cleanEEPROM();
 
+String getDataFromEEPROM();
+boolean writeAndCommitEEPROM(String data);
+
 #endif

@@ -6,10 +6,7 @@
 #include "LittleFS.h" 
 #include "statics.h"
 #include "utils.h"
-//#include "variables.h"
 #include "eepromUtils.h"
-//#include "mqttUtils.h"
-//#include "views.cpp"
 
 void startServer();
 void validateSessions();

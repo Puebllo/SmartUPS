@@ -32,15 +32,15 @@ void turnOn(String serverName) {
     Serial.print("mac: ");
     Serial.println(server.macAddress);
 
-    String ipp = "";
+    String ipAddress = "";
 
     int idx = server.ipAddress.lastIndexOf('.');
     if (idx != -1) {
-        ipp = server.ipAddress.substring(0, idx);
-        ipp += ".255";
+        ipAddress = server.ipAddress.substring(0, idx);
+        ipAddress += ".255";
 
         IPAddress computer_ip;
-        computer_ip.fromString(ipp);
+        computer_ip.fromString(ipAddress);
 
         Serial.print("IP address: ");
         Serial.println(computer_ip.toString());
